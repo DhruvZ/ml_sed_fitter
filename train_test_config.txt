@@ -1,11 +1,6 @@
 train
-
-
-
-
+/orange/narayanan/d.zimmerman/simba/ml_data/old_mirkwood_data_simba.npz
+/orange/narayanan/d.zimmerman/simba/ml_data/old_mirkwood_data_tng.npz
 test
-
-
-
-
+/orange/narayanan/d.zimmerman/simba/ml_data/old_mirkwood_data_eagle.npz
 both
