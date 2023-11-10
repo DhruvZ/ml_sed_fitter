@@ -4,6 +4,8 @@ import sys,os
 from glob import glob
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from matplotlib import colors
+
 
 from hyperion.model import ModelOutput
 import sedpy
@@ -39,7 +41,11 @@ gal_labels = []
 
 good_count = 0
 
-z_override = 0
+#z_override = 0
+z_val = [0.,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0]
+
+colormap = mpl.colors.Normalize(vmin=-1,vmax=3)
+m = mpl.cm.ScalarMappable(norm=colormap,cmap='inferno_r')#'
 
 for i in range(len(caes_file.galaxies)):
     galaxy_num = i
@@ -56,10 +62,23 @@ for i in range(len(caes_file.galaxies)):
 
     flux = np.asarray(lum_obs_sed)[::-1]*u.erg/u.s
 
-    lam_filt,phot,lam_a,flux_converted,filt_name = filter_helper.photo_calc(wav_sed,flux,z = z_override,H0 = H0,txtfile = 'default')
+    phot = []
+    lam_a = []
+    flux_converted = []
+
+    for zv in z_val:
+        lam_filt,ph,la,fc,filt_name = filter_helper.photo_calc(wav_sed,flux,z = zv,H0 = H0,txtfile = 'default')
+        phot.append(ph)
+        lam_a.append(la)
+        flux_converted.append(fc)
+
     if(save_figs and good_count < save_figs_count):
-        plt.loglog(lam_a,flux_converted)
-        plt.scatter(lam_filt,phot,alpha=0.5)
+        for j in range(1,len(lam_a)):
+            plt.plot(lam_a[j],flux_converted[j],label = f"{z_val[j]}",c = m.to_rgba(z_val[j]))
+            plt.scatter(lam_filt,phot[j],alpha=0.5,c = m.to_rgba(z_val[j]))
+        plt.xscale('log')
+        plt.yscale('log')
+        #plt.legend()
         plt.savefig(f'outspec/test_spectrum{i}.png')
         plt.close()
 
@@ -78,4 +97,4 @@ print(np.array(s_masses))
 #print(np.array(metal))
 #print(np.array(sfr))
 print(lam_filt)
-np.savez(outfile,wav_filt=lam_filt,wav_sed = lam_a,phot_data = np.array(phot_list),sed_data = np.array(sed_list),gal_num=np.array(gal_labels),stellar_mass=s_masses,dust_mass=d_masses,metallicity=metal,sfr=sfr,ages=ages,z=z,filter_names = filt_name)
+np.savez(outfile,wav_filt=lam_filt,wav_sed = lam_a,phot_data = np.array(phot_list),sed_data = np.array(sed_list),gal_num=np.array(gal_labels),stellar_mass=s_masses,dust_mass=d_masses,metallicity=metal,sfr=sfr,ages=ages,z=np.array(z_val),filter_names = filt_name)

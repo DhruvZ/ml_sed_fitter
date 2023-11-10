@@ -14,10 +14,10 @@ def find_nearest(array,value):
 def photo_calc(lam,lumtlam,z = 0,H0 = 70,txtfile = 'default'):
     cosmo = FlatLambdaCDM(Om0=0.3,Tcmb0 = 2.725,H0 = H0)
     if(z<10**-4):
-        dl = (10*u.pc).to(u.cm)
+        dl = (10*u.Mpc).to(u.cm)
 
     else:
-        dl = cosmo.luminositydistance(z).to(u.cm)
+        dl = cosmo.luminosity_distance(z).to(u.cm)
     lam_a = lam.to(u.AA)
     lumtlam = lumtlam.to(u.erg/u.s)
     
