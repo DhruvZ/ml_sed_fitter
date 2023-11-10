@@ -45,6 +45,13 @@ overlap_y = []
 
 all_y = {'train':train_data_y,'test':test_data_y,'both':overlap_y}
 
+
+train_z = []
+test_z = []
+overlap_z = []
+
+all_z = {'train':train_z,'test':test_z,'both':overlap_z}
+
 for cat in data_cats:
     if(len(data_dict[cat]) > 0):
         for loc in data_dict[cat]:
@@ -54,23 +61,63 @@ for cat in data_cats:
             for i in range(len(temp[labels[0]])):
                 temp_y = [[temp[label][i] for label in labels]]
                 all_y[cat] = all_y[cat]+temp_y
+            all_z[cat] = all_z[cat]+list(np.repeat([temp['z']],len(temp['phot_data']),axis=0))
+
 
 
 
 if(len(data_dict['both']) > 0):
-    train_X, test_X, train_y, test_y = train_test_split(all_x['both'], all_y['both'], test_size=0.3)
+    
+    print(all_x['both'])
+    print(np.shape(all_x['both']))
+    print(all_y['both'])
+    print(np.shape(all_y['both']))
+
+    gal_array = np.array(range(len(all_x)),dtype=int)
+    filler = np.full(len(gal_array),0)
+    #train_X, test_X, train_y, test_y = train_test_split(all_x['both'], all_y['both'], test_size=0.3)
+    train_idx,test_idx,_,_ = train_test_split(gal_array, filler, test_size=0.3)
+    #all_z['train']
+    print(train_idx)
+    train_X = all_x['both'][train_idx]
+    test_X = all_x['both'][test_idx]
+    train_y = all_y['both'][train_idx]
+    test_y = all_y['both'][test_idx]
+
+    z_train = all_z['both'][train_idx]
+    z_test = all_z['both'][test_idx]
 else:
     train_X = []
     test_X = []
     train_y = []
     test_y = []
 
+    z_train = []
+    z_test = []
+
 
 train_x_all = all_x['train'] + train_X
 train_y_all = all_y['train'] + train_y
+train_z_all = all_z['train'] + z_train
 
 test_x_all = all_x['test'] + test_X
 test_y_all = all_y['test'] + test_y
+test_z_all = all_z['test'] + z_test
+
+# new post-split step to have list of values associate with z raveled
+
+
+train_x_all = np.reshape(all_x['train'],(-1,len(all_x['train'][0,0])))
+train_y_all = np.reshape(all_y['train'],(-1,len(all_y['train'][0,0])))
+train_z_all = np.ravel(all_z['train'])
+
+test_x_all = np.reshape(all_x['test'],(-1,len(all_x['test'][0,0])))
+test_y_all = np.reshape(all_y['test'],(-1,len(all_y['test'][0,0])))
+test_z_all = np.ravel(all_z['test'])
+
+print(train_x_all)
+print(test_y_all)
+print(test_z_all)
 
 print(np.shape(train_x_all))
 print(np.shape(train_y_all))
