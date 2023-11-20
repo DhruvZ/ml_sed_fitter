@@ -10,16 +10,37 @@ from sklearn.impute import KNNImputer
 
 test_x = np.load('test_data_x.npy')
 test_y = np.load('test_data_y.npy')
+test_z = np.load('test_data_z.npy')
 
 def get_model_info():
-    xscaler = joblib.load('model_dir/scaler_v0.joblib')
-    imputer = joblib.load('model_dir/knn_v0.joblib')
-    model_stel = joblib.load('model_dir/stel_ng_v0.joblib')
-    model_dust = joblib.load('model_dir/dust_ng_v0.joblib')
-    model_sfr = joblib.load('model_dir/sfr_ng_v0.joblib')
-    model_metal = joblib.load('model_dir/metal_ng_v0.joblib')
-    model_age = joblib.load('model_dir/age_ng_v0.joblib')
-    return xscaler,imputer,model_stel,model_dust,model_sfr,model_metal,model_age
+    xscaler = joblib.load('model_dir/scaler_v0.1.joblib')
+    zscaler = joblib.load('model_dir/zscaler_v0.1.joblib')
+    cscaler = joblib.load('model_dir/cscaler_v0.1.joblib')
+    imputer = joblib.load('model_dir/knn_v0.1.joblib')
+    model_stel = joblib.load('model_dir/stel_ng_v0.1.joblib')
+    model_dust = joblib.load('model_dir/dust_ng_v0.1.joblib')
+    model_sfr = joblib.load('model_dir/sfr_ng_v0.1.joblib')
+    model_metal = joblib.load('model_dir/metal_ng_v0.1.joblib')
+    model_age = joblib.load('model_dir/age_ng_v0.1.joblib')
+    model_z = joblib.load('model_dir/z_ng_v0.1.joblib')
+    return xscaler,zscaler,cscaler,imputer,model_stel,model_dust,model_sfr,model_metal,model_age,model_z
+
+def eval_model_with_z(model,imputed_photometry,photo_z):
+
+    pred_imp = model.pred_dist(imputed_photometry)
+    mean_imp = pred_imp.params['loc']
+    std_imp = pred_imp.params['scale']
+    res_imp = np.random.normal(loc=mean_imp,scale=std_imp)
+    
+    photo_z_scaled = zscaler.transform(photo_z)
+    x_photo = np.concatenate((imputed_photometry[:,:-1],photo_z_scaled),axis = 1)
+    
+    pred_photz = model.pred_dist(x_photo)
+    mean_photz = pred_imp.params['loc']
+    std_photz = pred_imp.params['scale']
+    res_photz = np.random.normal(loc=mean_photz,scale=std_photz)
+
+    return res_imp,res_photz
 
 
 def process_error(data_val,pred_med,pred16,pred84):
@@ -37,41 +58,55 @@ def process_error(data_val,pred_med,pred16,pred84):
     #print(err_dev[:5])    
     return np.abs(err_dev)
 
-xscaler,imputer,model_stel,model_dust,model_sfr,model_metal,model_age = get_model_info()
-test_x_scaled = xscaler.transform(np.log10(test_x))
+xscaler,zscaler,cscaler,imputer,model_stel,model_dust,model_sfr,model_metal,model_age,model_z = get_model_info()
 
-stel_full = model_stel.pred_dist(test_x_scaled)
+
+test_x_scaled = np.log10(test_x)
+test_x_scaled[np.isnan(test_x_scaled) | (test_x_scaled < -50)] = -20
+test_x_scaled = xscaler.transform(test_x_scaled)
+
+test_z_scaled = zscaler.transform(test_z.reshape(-1,1))
+
+test_x_combined = np.concatenate((test_x_scaled,test_z_scaled),axis = 1)
+
+stel_full = model_stel.pred_dist(test_x_combined)
 stel_full_mean = stel_full.params['loc']
 stel_full_std = stel_full.params['scale']
 
-dust_full = model_dust.pred_dist(test_x_scaled)
+dust_full = model_dust.pred_dist(test_x_combined)
 dust_full_mean = dust_full.params['loc']
 dust_full_std = dust_full.params['scale']
 
-sfr_full = model_sfr.pred_dist(test_x_scaled)
+sfr_full = model_sfr.pred_dist(test_x_combined)
 sfr_full_mean = sfr_full.params['loc']
 sfr_full_std = sfr_full.params['scale']
 
-#metal_full = model_metal.pred_dist(test_x_scaled)
-#metal_full_mean = metal_full.params['loc']
-#metal_full_std = metal_full.params['scale']
+metal_full = model_metal.pred_dist(test_x_combined)
+metal_full_mean = metal_full.params['loc']
+metal_full_std = metal_full.params['scale']
 
-#age_full = model_age.pred_dist(test_x_scaled)
-#age_full_mean = age_full.params['loc']
-#age_full_std = age_full.params['scale']
+age_full = model_age.pred_dist(test_x_combined)
+age_full_mean = age_full.params['loc']
+age_full_std = age_full.params['scale']
+
+z_full = model_z.pred_dist(test_x_combined)
+z_full_mean = z_full.params['loc']
+z_full_std = z_full.params['loc']
+
 
 # start copy
 iterations = 100#0
 snr = 5
 
-filter_count = np.random.randint(len(test_x[0])-7,len(test_x[0]),size = len(test_x))
+filter_count = np.random.randint(len(test_x[0])-5,len(test_x[0]-1),size = len(test_x))
 
 filter_arr = np.full(np.shape(test_x),1)
 for i in range(len(filter_count)):
     count = filter_count[i]
-    perm = np.random.permutation(len(test_x[0]))
+    perm = np.random.permutation(len(test_x[0])-1)
     perm = perm[:count]
     filter_arr[i,perm] = 0
+    filter_arr[i,-1] = 0
 #print(filter_arr)
 filter_remove = (filter_arr == 0)
 #print(filter_remove)
@@ -85,50 +120,82 @@ gal_dust = np.log10(test_y[:,1])
 gal_sfr = np.log10(test_y[:,2]+1)
 #gal_metal = np.log10(test_y[:,3])
 #gal_age = test_y[:,4]
+gal_z = test_z
+
+z_imp = []
+z_photz = []
 
 data_imputed = []
-stel_mass_out = []
-dust_mass_out = []
-sfr_out = []
-metal_out = []
-age_out = []
+stel_mass_impz = []
+dust_mass_impz = []
+sfr_impz = []
+metal_impz = []
+age_impz = []
+
+stel_mass_photz = []
+dust_mass_photz = []
+sfr_photz = []
+metal_photz = []
+age_photz = []
 
 for i in range(iterations):
     phot_noise = gal_phot*np.random.normal(loc=1.0,scale = 1.0/snr,size=np.shape(gal_phot))
-    phot_scaled = xscaler.transform(np.log10(phot_noise))
-    phot_trimmed = np.copy(phot_scaled)
+    phot_scaled = np.log10(phot_noise)
+    phot_scaled[(phot_scaled < -50)] = -20
+    phot_scaled = xscaler.transform(phot_scaled)
+    phot_trimmed = np.concatenate(phot_scaled,np.full((len(phot_scaled),1),np.nan),axis = 1)
     #print(np.shape(phot_trimmed))
     phot_trimmed[filter_remove] = np.nan
     #print(phot_trimmed)
     #raise Exception()
+    #print('impute')
     imputed_phot = imputer.transform(phot_trimmed)
-    data_imputed.append(xscaler.inverse_transform(imputed_phot))
+    data_imputed.append(xscaler.inverse_transform(imputed_phot[:,:-1]))
     
-    pred_stel = model_stel.pred_dist(imputed_phot)
-    mean = pred_stel.params['loc']
-    std = pred_stel.params['scale']
-    stel_mass_out.append(np.random.normal(loc=mean,scale=std))
+    zi = zscaler.inverse_transform(imputed_phot[:,-1])
+
+    model_z.pred_dist(imputed_phot[:,:-1])
+    zp = np.random.normal(loc=z_dist.params['loc'],scale=z_dist.params['scale'])
+
+    z_imp.append(np.ravel(zi))
+    z_photz.append(zp)
     
-    pred_dust = model_dust.pred_dist(imputed_phot)
-    mean = pred_dust.params['loc']
-    std = pred_dust.params['scale']
-    dust_mass_out.append(np.random.normal(loc=mean,scale=std))
-
-    pred_sfr = model_sfr.pred_dist(imputed_phot)
-    mean = pred_sfr.params['loc']
-    std = pred_sfr.params['scale']
-    sfr_out.append(np.random.normal(loc=mean,scale=std))
-
-    #pred_metal = model_metal.pred_dist(imputed_phot)
-    #mean = pred_metal.params['loc']
-    #std = pred_metal.params['scale']
-    #metal_out.append(np.random.normal(loc=mean,scale=std))
-
-    #pred_age = model_age.pred_dist(imputed_phot)
-    #mean = pred_age.params['loc']
-    #std = pred_age.params['scale']
-    #age_out.append(np.random.normal(loc=mean,scale=std))
     
+    
+    #print('imputed')
+    #print('eval')
+    stel_imp,stel_photz = eval_model_with_z(model_stel,imputed_phot,zp)
+    stel_mass_impz.append(stel_imp)
+    stel_mass_photz.append(stel_photz)
+    
+    dust_imp,dust_photz = eval_model_with_z(model_dust,imputed_phot,zp)
+    dust_mass_impz.append(dust_imp)
+    dust_mass_photz.append(dust_photz)
+
+    sfr_imp,sfr_phot = eval_model_with_z(model_sfr,imputed_phot,zp)
+    sfr_impz.append(sfr_imp)
+    sfr_photz.append(sfr_photz)
+
+    stel_imp,stel_photz = eval_model_with_z(model_stel,imputed_phot,zp)
+    stel_mass_impz.append(stel_imp)
+    stel_mass_photz.append(stel_photz)
+
+    pred_metal = model_metal.pred_dist(imputed_phot)
+    mean = pred_metal.params['loc']
+    std = pred_metal.params['scale']
+    metal_out.append(np.random.normal(loc=mean,scale=std))
+
+    pred_age = model_age.pred_dist(imputed_phot)
+    mean = pred_age.params['loc']
+    std = pred_age.params['scale']
+    age_out.append(np.random.normal(loc=mean,scale=std))
+    
+    pred_z = model_z.pred_dist(imputed_phot)
+    mean = pred_z.params['loc']
+    std = pred_z.params['scale']
+    z_out.append(np.random.normal(loc=mean,scale=std))
+    #print('evaluated')
+
     #if(i%50==0):
     print(i)
 
@@ -150,13 +217,17 @@ sfr_med = np.median(sfr_out,axis=0)
 sfr_16 = np.quantile(sfr_out,0.16,axis=0)
 sfr_84 = np.quantile(sfr_out,0.84,axis=0)
 
-#metal_med = np.median(metal_out,axis=0)
-#metal_16 = np.quantile(metal_out,0.16,axis=0)
-#metal_84 = np.quantile(metal_out,0.84,axis=0)
+metal_med = np.median(metal_out,axis=0)
+metal_16 = np.quantile(metal_out,0.16,axis=0)
+metal_84 = np.quantile(metal_out,0.84,axis=0)
 
-#age_med = np.median(age_out,axis=0)
-#age_16 = np.quantile(age_out,0.16,axis=0)
-#age_84 = np.quantile(age_out,0.84,axis=0)
+age_med = np.median(age_out,axis=0)
+age_16 = np.quantile(age_out,0.16,axis=0)
+age_84 = np.quantile(age_out,0.84,axis=0)
+
+z_med = np.median(z_out,axis=0)
+z_16 = np.quantile(z_out,0.16,axis=0)
+z_84 = np.quantile(z_out,0.84,axis=0)
 
 
 phot_med = np.median(data_imputed,axis=0)
@@ -246,6 +317,23 @@ plt.close()
 #plt.close()
 
 
+#oto = np.linspace(0,2.5,100)
+#plt.plot(oto,oto,linestyle = '--',color = 'black')
+#plt.errorbar(gal_z,z_full_mean,yerr = z_full_std,fmt='o',label='NG',alpha=0.5,markersize=3)
+#plt.scatter(gal_z,z_full_mean,label='NG',alpha=0.5,s=3)
+hist_bins = np.arange(-2.5,2.5,0.1)
+plt.hist(z_full_mean - gal_z,bins = hist_bins,alpha=0.5,label='NG')
+plt.xlabel('predict-true z')
+plt.xlim(-2.1,2.1)
+plt.title(f'Full run test 0.1')
+plt.savefig('model_v0_outfigs/model_test0.1_z_full.png')
+plt.hist(z_med-gal_z,bins = hist_bins,alpha=0.5,label='NG imperfect')
+        #gal_z,z_med,yerr = [z_med-z_16,age_84-z_med],fmt='o',label='NG imperfect',alpha=0.5,markersize=3)
+plt.legend()
+plt.savefig('model_v0_outfigs/model_test0.1_z.png')
+plt.close()
+
+
 sig_off_stel = np.abs((stel_full_mean-gal_stel)/stel_full_std)
 sig_off_stel_noise = process_error(gal_stel,stel_med,stel_16,stel_84)
 
@@ -261,7 +349,8 @@ sig_off_sfr_noise = process_error(gal_sfr,sfr_med,sfr_16,sfr_84)
 #sig_off_age = np.abs((age_full_mean-gal_age)/age_full_std)
 #sig_off_age_noise = process_error(gal_age,age_med,age_16,age_84)
 
-
+sig_off_z = np.abs((z_full_mean-gal_z)/z_full_std)
+sig_off_z_noise = process_error(gal_z,z_med,z_16,z_84)
 
 #print()
 #print(gal_stel[:5])
@@ -335,6 +424,12 @@ plt.close()
 #plt.savefig('model_v0_outfigs/error_test_age_0.1.png')
 #plt.close()
 
-
+plt.hist(sig_off_z,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
+plt.hist(sig_off_z_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
+plt.legend()
+plt.xlim(right=4)
+plt.xlabel('sigma of z prediction from true value')
+plt.savefig('model_v0_outfigs/error_test_z_0.1.png')
+plt.close()
 
 
