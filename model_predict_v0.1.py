@@ -32,7 +32,7 @@ def eval_model_with_z(model,imputed_photometry,photo_z):
     std_imp = pred_imp.params['scale']
     res_imp = np.random.normal(loc=mean_imp,scale=std_imp)
     
-    photo_z_scaled = zscaler.transform(photo_z)
+    photo_z_scaled = zscaler.transform(photo_z.reshape(-1,1))
     x_photo = np.concatenate((imputed_photometry[:,:-1],photo_z_scaled),axis = 1)
     
     pred_photz = model.pred_dist(x_photo)
@@ -56,7 +56,7 @@ def process_error(data_val,pred_med,pred16,pred84):
     #print(err_dev[:5])
     err_dev[err_abs > 0] = err_abs[err_abs > 0]/(pred_med-pred16)[err_abs > 0]
     #print(err_dev[:5])    
-    return np.abs(err_dev)
+    return err_dev
 
 xscaler,zscaler,cscaler,imputer,model_stel,model_dust,model_sfr,model_metal,model_age,model_z = get_model_info()
 
@@ -98,12 +98,12 @@ z_full_std = z_full.params['loc']
 iterations = 100#0
 snr = 5
 
-filter_count = np.random.randint(len(test_x[0])-5,len(test_x[0]-1),size = len(test_x))
+filter_count = np.random.randint(len(test_x_combined[0])-5,len(test_x_combined[0]-1),size = len(test_x_combined))
 
-filter_arr = np.full(np.shape(test_x),1)
+filter_arr = np.full(np.shape(test_x_combined),1)
 for i in range(len(filter_count)):
     count = filter_count[i]
-    perm = np.random.permutation(len(test_x[0])-1)
+    perm = np.random.permutation(len(test_x_combined[0])-1)
     perm = perm[:count]
     filter_arr[i,perm] = 0
     filter_arr[i,-1] = 0
@@ -143,7 +143,7 @@ for i in range(iterations):
     phot_scaled = np.log10(phot_noise)
     phot_scaled[(phot_scaled < -50)] = -20
     phot_scaled = xscaler.transform(phot_scaled)
-    phot_trimmed = np.concatenate(phot_scaled,np.full((len(phot_scaled),1),np.nan),axis = 1)
+    phot_trimmed = np.concatenate((phot_scaled,np.full((len(phot_scaled),1),np.nan)),axis = 1)
     #print(np.shape(phot_trimmed))
     phot_trimmed[filter_remove] = np.nan
     #print(phot_trimmed)
@@ -152,9 +152,9 @@ for i in range(iterations):
     imputed_phot = imputer.transform(phot_trimmed)
     data_imputed.append(xscaler.inverse_transform(imputed_phot[:,:-1]))
     
-    zi = zscaler.inverse_transform(imputed_phot[:,-1])
+    zi = zscaler.inverse_transform(imputed_phot[:,-1].reshape(-1,1))
 
-    model_z.pred_dist(imputed_phot[:,:-1])
+    z_dist = model_z.pred_dist(imputed_phot[:,:-1])
     zp = np.random.normal(loc=z_dist.params['loc'],scale=z_dist.params['scale'])
 
     z_imp.append(np.ravel(zi))
@@ -174,61 +174,74 @@ for i in range(iterations):
 
     sfr_imp,sfr_phot = eval_model_with_z(model_sfr,imputed_phot,zp)
     sfr_impz.append(sfr_imp)
-    sfr_photz.append(sfr_photz)
+    sfr_photz.append(sfr_phot)
 
-    stel_imp,stel_photz = eval_model_with_z(model_stel,imputed_phot,zp)
-    stel_mass_impz.append(stel_imp)
-    stel_mass_photz.append(stel_photz)
+    metal_imp,metal_phot = eval_model_with_z(model_metal,imputed_phot,zp)
+    metal_impz.append(metal_imp)
+    metal_photz.append(metal_phot)
 
-    pred_metal = model_metal.pred_dist(imputed_phot)
-    mean = pred_metal.params['loc']
-    std = pred_metal.params['scale']
-    metal_out.append(np.random.normal(loc=mean,scale=std))
+    age_imp,age_phot = eval_model_with_z(model_age,imputed_phot,zp)
+    age_impz.append(age_imp)
+    age_photz.append(age_phot)
 
-    pred_age = model_age.pred_dist(imputed_phot)
-    mean = pred_age.params['loc']
-    std = pred_age.params['scale']
-    age_out.append(np.random.normal(loc=mean,scale=std))
-    
-    pred_z = model_z.pred_dist(imputed_phot)
-    mean = pred_z.params['loc']
-    std = pred_z.params['scale']
-    z_out.append(np.random.normal(loc=mean,scale=std))
     #print('evaluated')
 
     #if(i%50==0):
     print(i)
 
-print(np.shape(stel_mass_out))
+print(np.shape(stel_mass_impz))
 print(np.shape(data_imputed))
 
-stel_med = np.median(stel_mass_out,axis=0)
-stel_16 = np.quantile(stel_mass_out,0.16,axis=0)
-stel_84 = np.quantile(stel_mass_out,0.84,axis=0)
+stel_med_impz = np.median(stel_mass_impz,axis=0)
+stel_16_impz = np.quantile(stel_mass_impz,0.16,axis=0)
+stel_84_impz = np.quantile(stel_mass_impz,0.84,axis=0)
+
+stel_med_photz = np.median(stel_mass_photz,axis=0)
+stel_16_photz = np.quantile(stel_mass_photz,0.16,axis=0)
+stel_84_photz = np.quantile(stel_mass_photz,0.84,axis=0)
 
 #print(np.shape(stel_med))
 #print(np.shape(stel_16))
 
-dust_med = np.median(dust_mass_out,axis=0)
-dust_16 = np.quantile(dust_mass_out,0.16,axis=0)
-dust_84 = np.quantile(dust_mass_out,0.84,axis=0)
+dust_med_impz = np.median(dust_mass_impz,axis=0)
+dust_16_impz = np.quantile(dust_mass_impz,0.16,axis=0)
+dust_84_impz = np.quantile(dust_mass_impz,0.84,axis=0)
 
-sfr_med = np.median(sfr_out,axis=0)
-sfr_16 = np.quantile(sfr_out,0.16,axis=0)
-sfr_84 = np.quantile(sfr_out,0.84,axis=0)
+dust_med_photz = np.median(dust_mass_photz,axis=0)
+dust_16_photz = np.quantile(dust_mass_photz,0.16,axis=0)
+dust_84_photz = np.quantile(dust_mass_photz,0.84,axis=0)
 
-metal_med = np.median(metal_out,axis=0)
-metal_16 = np.quantile(metal_out,0.16,axis=0)
-metal_84 = np.quantile(metal_out,0.84,axis=0)
+sfr_med_impz = np.median(sfr_impz,axis=0)
+sfr_16_impz = np.quantile(sfr_impz,0.16,axis=0)
+sfr_84_impz = np.quantile(sfr_impz,0.84,axis=0)
 
-age_med = np.median(age_out,axis=0)
-age_16 = np.quantile(age_out,0.16,axis=0)
-age_84 = np.quantile(age_out,0.84,axis=0)
+sfr_med_photz = np.median(sfr_photz,axis=0)
+sfr_16_photz = np.quantile(sfr_photz,0.16,axis=0)
+sfr_84_photz = np.quantile(sfr_photz,0.84,axis=0)
 
-z_med = np.median(z_out,axis=0)
-z_16 = np.quantile(z_out,0.16,axis=0)
-z_84 = np.quantile(z_out,0.84,axis=0)
+metal_med_impz = np.median(metal_impz,axis=0)
+metal_16_impz = np.quantile(metal_impz,0.16,axis=0)
+metal_84_impz = np.quantile(metal_impz,0.84,axis=0)
 
+metal_med_photz = np.median(metal_photz,axis=0)
+metal_16_photz = np.quantile(metal_photz,0.16,axis=0)
+metal_84_photz = np.quantile(metal_photz,0.84,axis=0)
+
+age_med_impz = np.median(age_impz,axis=0)
+age_16_impz = np.quantile(age_impz,0.16,axis=0)
+age_84_impz = np.quantile(age_impz,0.84,axis=0)
+
+age_med_photz = np.median(age_photz,axis=0)
+age_16_photz = np.quantile(age_photz,0.16,axis=0)
+age_84_photz = np.quantile(age_photz,0.84,axis=0)
+
+z_med_imp = np.median(z_imp,axis=0)
+z_16_imp = np.quantile(z_imp,0.16,axis=0)
+z_84_imp = np.quantile(z_imp,0.84,axis=0)
+
+z_med_photz = np.median(z_photz,axis=0)
+z_16_photz = np.quantile(z_photz,0.16,axis=0)
+z_84_photz = np.quantile(z_photz,0.84,axis=0)
 
 phot_med = np.median(data_imputed,axis=0)
 phot_16 = np.quantile(data_imputed,0.16,axis=0)
@@ -241,47 +254,51 @@ phot_84 = np.quantile(data_imputed,0.84,axis=0)
 
 oto = np.linspace(7,12.5,100)
 plt.plot(oto,oto,linestyle = '--',color = 'black')
-plt.errorbar(gal_stel,stel_full_mean,yerr = stel_full_std,fmt='o',label='NG',alpha=0.5,markersize=3)
+plt.errorbar(gal_stel,stel_full_mean,yerr = stel_full_std,fmt='o',label='NG',alpha=0.1,markersize=3)
 plt.xlabel('log true M*')
 plt.ylabel('log predicted M*')
 plt.xlim(7.2,12.5)
 plt.ylim(7.2,12.5)
-plt.title(f'Full run test 0.1')
-plt.savefig('model_v0_outfigs/model_test0.1_stel_full.png')
-plt.errorbar(gal_stel,stel_med,yerr = [stel_med-stel_16,stel_84-stel_med],fmt='o',label='NG imperfect',alpha=0.5,markersize=3)
+plt.title(f'Full run test 0.2')
+plt.savefig('model_v0_outfigs/model_test0.2_stel_full.png')
+plt.errorbar(gal_stel,stel_med_impz,yerr = [stel_med_impz-stel_16_impz,stel_84_impz-stel_med_impz],fmt='o',label='NG imperfect imputed',alpha=0.1,markersize=3)
+plt.errorbar(gal_stel,stel_med_photz,yerr = [stel_med_photz-stel_16_photz,stel_84_photz-stel_med_photz],fmt='o',label='NG imperfect photz',alpha=0.1,markersize=3)
 plt.legend()
-plt.savefig('model_v0_outfigs/model_test0.1_stel.png')
+plt.savefig('model_v0_outfigs/model_test0.2_stel.png')
 plt.close()
+
 
 
 
 oto = np.linspace(2,9,100)
 plt.plot(oto,oto,linestyle = '--',color = 'black')
-plt.errorbar(gal_dust,dust_full_mean,yerr = dust_full_std,fmt='o',label='NG',alpha=0.5,markersize=3)
+plt.errorbar(gal_dust,dust_full_mean,yerr = dust_full_std,fmt='o',label='NG',alpha=0.1,markersize=3)
 plt.xlabel('log true M_dust')
 plt.ylabel('log predicted M_dust')
 plt.xlim(2,9)
 plt.ylim(2,9)
-plt.title(f'Full run test 0.1')
-plt.savefig('model_v0_outfigs/model_test0.1_dust_full.png')
-plt.errorbar(gal_dust,dust_med,yerr = [dust_med-dust_16,dust_84-dust_med],fmt='o',label='NG imperfect',alpha=0.5,markersize=3)
+plt.title(f'Full run test 0.2')
+plt.savefig('model_v0_outfigs/model_test0.2_dust_full.png')
+plt.errorbar(gal_dust,dust_med_impz,yerr = [dust_med_impz-dust_16_impz,dust_84_impz-dust_med_impz],fmt='o',label='NG imperfect imputed',alpha=0.1,markersize=3)
+plt.errorbar(gal_dust,dust_med_photz,yerr = [dust_med_photz-dust_16_photz,dust_84_photz-dust_med_photz],fmt='o',label='NG imperfect photz',alpha=0.1,markersize=3)
 plt.legend()
-plt.savefig('model_v0_outfigs/model_test0.1_dust.png')
+plt.savefig('model_v0_outfigs/model_test0.2_dust.png')
 plt.close()
 
 
 oto = np.linspace(-0.1,2.5,100)
 plt.plot(oto,oto,linestyle = '--',color = 'black')
-plt.errorbar(gal_sfr,sfr_full_mean,yerr = sfr_full_std,fmt='o',label='NG',alpha=0.5,markersize=3)
+plt.errorbar(gal_sfr,sfr_full_mean,yerr = sfr_full_std,fmt='o',label='NG',alpha=0.1,markersize=3)
 plt.xlabel('true log (sfr+1)')
 plt.ylabel('predicted log (sfr+1)')
 plt.xlim(-0.1,1.2)
 plt.ylim(-0.1,1.2)
-plt.title(f'Full run test 0.1')
-plt.savefig('model_v0_outfigs/model_test0.1_sfr_full.png')
-plt.errorbar(gal_sfr,sfr_med,yerr = [sfr_med-sfr_16,sfr_84-sfr_med],fmt='o',label='NG imperfect',alpha=0.5,markersize=3)
+plt.title(f'Full run test 0.2')
+plt.savefig('model_v0_outfigs/model_test0.2_sfr_full.png')
+plt.errorbar(gal_sfr,sfr_med_impz,yerr = [sfr_med_impz-sfr_16_impz,sfr_84_impz-sfr_med_impz],fmt='o',label='NG imperfect imputed',alpha=0.1,markersize=3)
+plt.errorbar(gal_sfr,sfr_med_photz,yerr = [sfr_med_photz-sfr_16_photz,sfr_84_photz-sfr_med_photz],fmt='o',label='NG imperfect photz',alpha=0.1,markersize=3)
 plt.legend()
-plt.savefig('model_v0_outfigs/model_test0.1_sfr.png')
+plt.savefig('model_v0_outfigs/model_test0.2_sfr.png')
 plt.close()
 
 
@@ -325,23 +342,28 @@ hist_bins = np.arange(-2.5,2.5,0.1)
 plt.hist(z_full_mean - gal_z,bins = hist_bins,alpha=0.5,label='NG')
 plt.xlabel('predict-true z')
 plt.xlim(-2.1,2.1)
-plt.title(f'Full run test 0.1')
-plt.savefig('model_v0_outfigs/model_test0.1_z_full.png')
-plt.hist(z_med-gal_z,bins = hist_bins,alpha=0.5,label='NG imperfect')
+plt.title(f'Full run test 0.2')
+plt.savefig('model_v0_outfigs/model_test0.2_z_full.png')
+plt.hist(z_med_imp-gal_z,bins = hist_bins,alpha=0.5,label='NG imperfect imputed')
+plt.hist(z_med_photz-gal_z,bins = hist_bins,alpha=0.5,label='NG imperfect photz')
         #gal_z,z_med,yerr = [z_med-z_16,age_84-z_med],fmt='o',label='NG imperfect',alpha=0.5,markersize=3)
 plt.legend()
-plt.savefig('model_v0_outfigs/model_test0.1_z.png')
+plt.savefig('model_v0_outfigs/model_test0.2_z.png')
 plt.close()
 
 
-sig_off_stel = np.abs((stel_full_mean-gal_stel)/stel_full_std)
-sig_off_stel_noise = process_error(gal_stel,stel_med,stel_16,stel_84)
+sig_off_stel = (stel_full_mean-gal_stel)/stel_full_std
+sig_off_stel_noise_impz = process_error(gal_stel,stel_med_impz,stel_16_impz,stel_84_impz)
+sig_off_stel_noise_photz = process_error(gal_stel,stel_med_photz,stel_16_photz,stel_84_photz)
 
-sig_off_dust = np.abs((dust_full_mean-gal_dust)/dust_full_std)
-sig_off_dust_noise = process_error(gal_dust,dust_med,dust_16,dust_84)
+sig_off_dust = (dust_full_mean-gal_dust)/dust_full_std
+sig_off_dust_noise_impz = process_error(gal_dust,dust_med_impz,dust_16_impz,dust_84_impz)
+sig_off_dust_noise_photz = process_error(gal_dust,dust_med_photz,dust_16_photz,dust_84_photz)
 
-sig_off_sfr = np.abs((sfr_full_mean-gal_sfr)/sfr_full_std)
-sig_off_sfr_noise = process_error(gal_sfr,sfr_med,sfr_16,sfr_84)
+
+sig_off_sfr = (sfr_full_mean-gal_sfr)/sfr_full_std
+sig_off_sfr_noise_impz = process_error(gal_sfr,sfr_med_impz,sfr_16_impz,sfr_84_impz)
+sig_off_sfr_noise_photz = process_error(gal_sfr,sfr_med_photz,sfr_16_photz,sfr_84_photz)
 
 #sig_off_metal = np.abs((metal_full_mean-gal_metal)/metal_full_std)
 #sig_off_metal_noise = process_error(gal_metal,metal_med,metal_16,metal_84)
@@ -349,8 +371,11 @@ sig_off_sfr_noise = process_error(gal_sfr,sfr_med,sfr_16,sfr_84)
 #sig_off_age = np.abs((age_full_mean-gal_age)/age_full_std)
 #sig_off_age_noise = process_error(gal_age,age_med,age_16,age_84)
 
-sig_off_z = np.abs((z_full_mean-gal_z)/z_full_std)
-sig_off_z_noise = process_error(gal_z,z_med,z_16,z_84)
+
+
+sig_off_z = (z_full_mean-gal_z)/z_full_std
+sig_off_z_noise_impz = process_error(gal_z,z_med_imp,z_16_imp,z_84_imp)
+sig_off_z_noise_photz = process_error(gal_z,z_med_photz,z_16_photz,z_84_photz)
 
 #print()
 #print(gal_stel[:5])
@@ -377,6 +402,10 @@ sig_off_z_noise = process_error(gal_z,z_med,z_16,z_84)
 #print(hight)
 #print(res_test)
 #process_error(data_val,pred_med,pred16,pred84)
+
+# first absolute histogram, then error scaled histogram, then cumulative error histogram
+
+
 bins = np.arange(0,10,0.5)
 plt.hist(sig_off_stel,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
 plt.hist(sig_off_stel_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
