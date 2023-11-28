@@ -11,6 +11,8 @@ from sklearn.impute import KNNImputer
 test_x = np.load('test_data_x.npy')
 test_y = np.load('test_data_y.npy')
 test_z = np.load('test_data_z.npy')
+iterations = 100#0
+snr = 5
 
 def get_model_info():
     xscaler = joblib.load('model_dir/scaler_v0.1.joblib')
@@ -95,10 +97,8 @@ z_full_std = z_full.params['loc']
 
 
 # start copy
-iterations = 100#0
-snr = 5
 
-filter_count = np.random.randint(len(test_x_combined[0])-5,len(test_x_combined[0]-1),size = len(test_x_combined))
+filter_count = np.random.randint(len(test_x_combined[0])-6,len(test_x_combined[0])-1,size = len(test_x_combined))
 
 filter_arr = np.full(np.shape(test_x_combined),1)
 for i in range(len(filter_count)):
@@ -340,7 +340,7 @@ plt.close()
 #plt.scatter(gal_z,z_full_mean,label='NG',alpha=0.5,s=3)
 hist_bins = np.arange(-2.5,2.5,0.1)
 plt.hist(z_full_mean - gal_z,bins = hist_bins,alpha=0.5,label='NG')
-plt.xlabel('predict-true z')
+plt.xlabel('predicted-true z')
 plt.xlim(-2.1,2.1)
 plt.title(f'Full run test 0.2')
 plt.savefig('model_v0_outfigs/model_test0.2_z_full.png')
@@ -404,61 +404,38 @@ sig_off_z_noise_photz = process_error(gal_z,z_med_photz,z_16_photz,z_84_photz)
 #process_error(data_val,pred_med,pred16,pred84)
 
 # first absolute histogram, then error scaled histogram, then cumulative error histogram
+def hists_maker(prop_name,save_name,truth,mean_all,sig_off_all,imp_mean,imp_sig_off,photz_mean,photz_sig_off):
+    bins1 = np.arange(-3,3,0.1)
+    plt.hist(mean_all-truth,bins = bins1,label = 'full',alpha = 0.3)
+    plt.hist(imp_mean-truth,bins = bins1,label = 'imperfect imputed z',alpha=0.3)
+    plt.hist(photz_mean-truth,bins = bins1,label = 'imperfect phot z',alpha = 0.3)
+    plt.legend()
+    plt.xlabel(f'predicted {prop_name} - true {prop_name}')
+    plt.yscale('log')
+    plt.savefig(f'model_v0_outfigs/acc_test_{save_name}_0.2.png')
+    plt.close()
+
+    bins2 = np.arange(-5,5,0.1)
+    plt.hist(sig_off_all,bins = bins2,label = 'full',alpha = 0.3)
+    plt.hist(imp_sig_off,bins = bins2,label = 'imperfect imputed z',alpha=0.3)
+    plt.hist(photz_sig_off,bins = bins2,label = 'imperfect phot z',alpha = 0.3)
+    plt.legend()
+    plt.xlabel(f'predicted {prop_name} - true {prop_name}/uncertainty')
+    plt.yscale('log')
+    plt.savefig(f'model_v0_outfigs/error_test1_{save_name}_0.2.png')
+    plt.close()
+
+    bins3 = np.arange(0,5,0.1)
+    plt.hist(np.abs(sig_off_all),bins = bins3,density = True,cumulative=True,label = 'full',alpha = 0.3)
+    plt.hist(np.abs(imp_sig_off),bins = bins3,density = True,cumulative=True,label = 'imperfect imputed z',alpha=0.3)
+    plt.hist(np.abs(photz_sig_off),bins = bins3,density = True,cumulative=True,label = 'imperfect phot z',alpha = 0.3)
+    plt.legend()
+    plt.xlabel(f'cumulative {prop_name} offset plot')
+    plt.savefig(f'model_v0_outfigs/error_test2_{save_name}_0.2.png')
+    plt.close()
 
 
-bins = np.arange(0,10,0.5)
-plt.hist(sig_off_stel,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-plt.hist(sig_off_stel_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-plt.legend()
-plt.xlim(right=4)
-plt.xlabel('sigma of stel prediction from true value')
-plt.savefig('model_v0_outfigs/error_test_stel_0.1.png')
-plt.close()
-
-
-plt.hist(sig_off_dust,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-plt.hist(sig_off_dust_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-plt.legend()
-plt.xlim(right=4)
-plt.xlabel('sigma of dust prediction from true value')
-plt.savefig('model_v0_outfigs/error_test_dust_0.1.png')
-plt.close()
-
-
-
-plt.hist(sig_off_sfr,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-plt.hist(sig_off_sfr_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-plt.legend()
-plt.xlim(right=4)
-plt.xlabel('sigma of sfr prediction from true value')
-plt.savefig('model_v0_outfigs/error_test_sfr_0.1.png')
-plt.close()
-
-
-#plt.hist(sig_off_metal,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-#plt.hist(sig_off_metal_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-#plt.legend()
-#plt.xlim(right=4)
-#plt.xlabel('sigma of metal prediction from true value')
-#plt.savefig('model_v0_outfigs/error_test_metal_0.1.png')
-#plt.close()
-
-##
-
-#plt.hist(sig_off_age,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-#plt.hist(sig_off_age_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-#plt.legend()
-#plt.xlim(right=4)
-#plt.xlabel('sigma of age prediction from true value')
-#plt.savefig('model_v0_outfigs/error_test_age_0.1.png')
-#plt.close()
-
-plt.hist(sig_off_z,bins=bins,density = True,cumulative=True,label='full',alpha=0.5)
-plt.hist(sig_off_z_noise,bins=bins,density = True,cumulative=True,label='imperfect',alpha=0.5)
-plt.legend()
-plt.xlim(right=4)
-plt.xlabel('sigma of z prediction from true value')
-plt.savefig('model_v0_outfigs/error_test_z_0.1.png')
-plt.close()
-
-
+hists_maker('log(M*)','stel',gal_stel,stel_full_mean,sig_off_stel,stel_med_impz,sig_off_stel_noise_impz,stel_med_photz,sig_off_stel_noise_photz)
+hists_maker('log(Mdust)','dust',gal_dust,dust_full_mean,sig_off_dust,dust_med_impz,sig_off_dust_noise_impz,dust_med_photz,sig_off_dust_noise_photz)
+hists_maker('log(sfr+1)','sfr',gal_sfr,sfr_full_mean,sig_off_sfr,sfr_med_impz,sig_off_sfr_noise_impz,sfr_med_photz,sig_off_sfr_noise_photz)
+hists_maker('z','z',gal_z,z_full_mean,sig_off_z,z_med_imp,sig_off_z_noise_impz,z_med_photz,sig_off_z_noise_photz)
